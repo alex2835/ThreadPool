@@ -6,7 +6,7 @@
 #include <atomic>
 #include <future>
 #include <condition_variable>
-#include "stack_function.hpp"
+#include "fixed_size_function.hpp"
 
 template <size_t MaxFuncSize = 64>
 class ThreadPool
@@ -21,13 +21,15 @@ public:
             {
                 while ( true )
                 {
-                    StackFunction<void( void ), MaxFuncSize> task;
+                    FixedSizeFunction<void( void ), MaxFuncSize> task;
                     {
                         std::unique_lock<std::mutex> lock( mEventMutex );
+                        
                         mConditionVariable.wait( lock, [&]()
                         {
                             return !mIsRunning || !mTasks.empty();
                         } );
+
                         if ( !mIsRunning && mTasks.empty() )
                             break;
 
@@ -59,7 +61,7 @@ public:
     }
 
 private:
-    std::queue<StackFunction<void( void ), MaxFuncSize>> mTasks;
+    std::queue<FixedSizeFunction<void( void ), MaxFuncSize>> mTasks;
     std::condition_variable mConditionVariable;
     std::mutex mEventMutex;
     std::vector<std::thread> mThreadsPool;
