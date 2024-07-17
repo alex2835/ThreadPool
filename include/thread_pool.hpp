@@ -60,6 +60,17 @@ public:
         mConditionVariable.notify_one();
     }
 
+    template <typename TaskType>
+    void AddTasks( std::vector<TaskType>& tasks )
+    {
+        {
+            std::unique_lock<std::mutex> lock( mEventMutex );
+            for ( auto& task : tasks )
+                mTasks.push( [&](){ task(); } );
+        }
+        mConditionVariable.notify_all();
+    }
+
 private:
     std::queue<FixedSizeFunction<void( void ), MaxFuncSize>> mTasks;
     std::condition_variable mConditionVariable;

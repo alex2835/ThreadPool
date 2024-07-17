@@ -86,11 +86,12 @@ int main( void )
         std::println( "End will be in destructor" );
     }
     
-    std::println( "\n" );
-    std::println( "{}", sizeof( FixedSizeFunction<void( void )> ) );
-    std::println( "{}\n\n", sizeof( FixedSizePackagedTask<void( void )> ) );
+    std::println( "\nFixedSizeFunction size {}", sizeof( FixedSizeFunction<void( void )> ) );
+    std::println( "FixedSizePackagedTask size {}\n", sizeof( FixedSizePackagedTask<void( void )> ) );
+    std::println( "std::packaged_task (Allocate heap memory) size {}\n", sizeof( std::packaged_task<void( void )> ) );
+
     {
-        ThreadPool<256> threadPool;
+        ThreadPool threadPool;
         
         // create tasks
         std::vector<FixedSizePackagedTask<void(void)>> tasks;
@@ -98,8 +99,7 @@ int main( void )
             tasks.emplace_back( [](){ std::println( "hello future thread:{}", std::this_thread::get_id() ); } );
 
         // add tasks (function view) to thread pool
-        for ( auto& task : tasks )
-            threadPool.AddTask( [&](){ task(); } );
+        threadPool.AddTasks( tasks );
 
         // wait and get result
         for ( auto& task: tasks )

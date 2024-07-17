@@ -2,7 +2,7 @@
 #include <array>
 #include <type_traits>
 
-template <typename Signature, size_t StorageSize = 64>
+template <typename Signature, size_t StorageSize = 32>
 class FixedSizeFunction;
 
 template <typename Ret, typename... Args, size_t StorageSize>
