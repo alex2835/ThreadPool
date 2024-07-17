@@ -95,6 +95,7 @@ int main( void )
         // add tasks (function view) to thread pool
         threadPool.AddTasks( tasks );
 
+        // wait for all tasks
         for ( auto& task : tasks )
             task.getFuture().get();
 
