@@ -4,7 +4,7 @@
 #include <type_traits>
 #include "fixed_size_function.hpp"
 
-template <typename Signature, size_t StorageSize = 32>
+template <typename Signature, size_t StorageSize = 64>
 class FixedSizePackagedTask;
 
 template <typename Ret, typename... Args, size_t StorageSize>

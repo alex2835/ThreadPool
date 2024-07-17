@@ -24,7 +24,7 @@ public:
                     FixedSizeFunction<void( void ), MaxFuncSize> task;
                     {
                         std::unique_lock<std::mutex> lock( mEventMutex );
-                        
+
                         mConditionVariable.wait( lock, [&]()
                         {
                             return !mIsRunning || !mTasks.empty();
@@ -40,7 +40,7 @@ public:
                 }
             } ) );
         }
-    } 
+    }
 
     ~ThreadPool()
     {
