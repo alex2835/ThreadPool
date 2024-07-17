@@ -1,6 +1,7 @@
 #include <iostream>
 #include <cassert>
 #include <print>
+#include <ranges>
 #include "fixed_size_function.hpp"
 #include "fixed_size_packaged_task.hpp"
 #include "thread_pool.hpp"
@@ -11,6 +12,16 @@ void* operator new ( size_t size, const char* filename, int line )
     assert( false );
     void* ptr = new char[size];
     return ptr;
+}
+
+int mulFunc( int x, int y )
+{
+    return x * y;
+}
+
+void printFunc()
+{
+    std::print( "hello" );
 }
 
 
@@ -24,52 +35,77 @@ int main( void )
 
         assert( mul( 2, 3 ) == 6 );
         assert( sum( 2, 3 ) == 5 );
-        mul.Swap( sum );
+        std::swap( mul, sum );
         assert( mul( 2, 3 ) == 5 );
         assert( sum( 2, 3 ) == 6 );
     }
+    {
+        FixedSizeFunction<int( int, int )> mul( []( int a, int b )
+        {
+            return a * b;
+        } );
+        assert( mul( 2, 3 ) == 6 );
+    }
+    {
+        FixedSizeFunction<int( int, int )> mul( mulFunc );
+        assert( mul( 2, 3 ) == 6 );
+    }
 
+    
     // Fixed size packaged task
     {
         std::future<int> future;
         {
-            FixedSizePackagedTask<int( int, int )> mulTask( [&]( int a, int b ) { return a * b; } );
+            FixedSizePackagedTask<int( int, int )> mulTask( []( int a, int b ) { return a * b; } );
+            future = mulTask.getFuture();
+            mulTask( 2, 3 );
+        }
+        assert( future.get() == 6 );
+    }
+    {
+        std::future<int> future;
+        {
+            FixedSizePackagedTask<int( int, int )> mulTask( mulFunc );
             future = mulTask.getFuture();
             mulTask( 2, 3 );
         }
         assert( future.get() == 6 );
     }
 
+
     // Thread pool
     {
-        ThreadPool thread_pool;
+        ThreadPool threadPool;
         for ( size_t i = 0; i < 10; i++ )
         {
-            thread_pool.AddTask( [i]()
+            threadPool.AddTask( [i]()
             {
-                std::println( "hello {}", i );
+                std::println( "hello i:{} thread:{}", i, std::this_thread::get_id() );
             } );
         }
         std::println( "End will be in destructor" );
     }
     
-    //std::println( "\n\n\n" );
-    //{
-    //    ThreadPool thread_pool;
+    std::println( "\n" );
+    std::println( "{}", sizeof( FixedSizeFunction<void( void )> ) );
+    std::println( "{}\n\n", sizeof( FixedSizePackagedTask<void( void )> ) );
+    {
+        ThreadPool<256> threadPool;
+        
+        // create tasks
+        std::vector<FixedSizePackagedTask<void(void)>> tasks;
+        for ( size_t i = 0; i < 10; i++ )
+            tasks.emplace_back( [](){ std::println( "hello future thread:{}", std::this_thread::get_id() ); } );
 
-    //    std::vector<std::packaged_task<void(void)>> tasks;
-    //    for ( size_t i = 0; i < 10; i++ )
-    //    {
-    //        std::packaged_task<void( void )> task( []()
-    //        {
-    //            std::cout << "hello future" << std::endl;
-    //        } );
-    //        tasks.push_back( task );
-    //        thread_pool.AddTask( task );
-    //    }
-    //    for ( auto& task: tasks )
-    //        task.get_future().get();
-    //    std::cout << "\n future end \n";
-    //}
+        // add tasks (function view) to thread pool
+        for ( auto& task : tasks )
+            threadPool.AddTask( [&](){ task(); } );
+
+        // wait and get result
+        for ( auto& task: tasks )
+            task.getFuture().get();
+
+        std::print( "\nfuture end\n" );
+    }
     return 0;
 }

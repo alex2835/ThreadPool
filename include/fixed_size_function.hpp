@@ -1,6 +1,6 @@
 ﻿#pragma once
-#include <type_traits>
 #include <array>
+#include <type_traits>
 
 template <typename Signature, size_t StorageSize = 64>
 class FixedSizeFunction;
@@ -16,6 +16,8 @@ class FixedSizeFunction<Ret( Args... ), StorageSize>
 
 public:
 	FixedSizeFunction() = default;
+	FixedSizeFunction( FixedSizeFunction& ) = delete;
+	FixedSizeFunction& operator=( FixedSizeFunction& ) = delete;
 
 	/**
 	 * @brief FixedSizeFunction Constructor from functional object.
@@ -39,8 +41,8 @@ public:
 
 		mAllocationFunction = []( StorageType& storage, void* funcObj )
 		{
-			UnrefFunctionType* functional_object = reinterpret_cast<UnrefFunctionType*>( funcObj );
-			::new( storage.data() ) UnrefFunctionType( std::move( *functional_object ) );
+			UnrefFunctionType* functionalObject = reinterpret_cast<UnrefFunctionType*>( funcObj );
+			::new( storage.data() ) UnrefFunctionType( std::forward<UnrefFunctionType>( *functionalObject ) );
 		};
 
 		mDeallocationFunction = []( StorageType& storage )
@@ -57,6 +59,7 @@ public:
 	template <typename FuncRet, typename... FuncArgs>
 	FixedSizeFunction( FuncRet( *func )( FuncArgs... ) )
 	{
+		std::println( "func func constructor" );
 		mFunctionPtr = func;
 		mCallable = []( StorageType& /*funcObjStorage*/, FunctionPtrType func, Args&&... args ) -> Ret
 		{
@@ -64,19 +67,14 @@ public:
 		};
 	}
 
-	Ret operator()( Args&&... args )
-    {
-        return mCallable( mStorage, mFunctionPtr, std::forward<Args>( args )... );
-    }
-
     FixedSizeFunction( FixedSizeFunction&& other ) noexcept
     {
-        Swap( other );
+        swap( other );
     }
 	
 	FixedSizeFunction& operator=( FixedSizeFunction&& other ) noexcept
 	{
-		Swap( other );
+		swap( other );
 		return *this;
 	}
 
@@ -86,22 +84,28 @@ public:
 			mDeallocationFunction( mStorage );
 	}
 
-    void Swap( FixedSizeFunction& other )
+    void swap( FixedSizeFunction& other )
     {
         std::swap( mFunctionPtr, other.mFunctionPtr );
         std::swap( mStorage, other.mStorage );
         std::swap( mCallable, other.mCallable );
-        std::swap( mFunctionPtr, other.mFunctionPtr );
         std::swap( mDeallocationFunction, other.mDeallocationFunction );
         std::swap( mAllocationFunction, other.mAllocationFunction );
     }
 
+    Ret operator()( Args&&... args )
+    {
+        if ( not mCallable )
+            throw std::runtime_error( "Callable not set" );
+        return mCallable( mStorage, mFunctionPtr, std::forward<Args>( args )... );
+    }
+
 private:
+    CallableType mCallable = nullptr;
 	// Pure function
 	FunctionPtrType mFunctionPtr = nullptr;
 	// Functional object
 	StorageType mStorage;
-	CallableType mCallable = nullptr;
 	AllocationFunctionType mAllocationFunction = nullptr;
 	DeallocationFunctionType mDeallocationFunction = nullptr;
 };

@@ -1,54 +1,58 @@
 #pragma once
 #include <type_traits>
-#include <array>
 
-template <typename RetType, typename... Args>
-class FunctionView<RetType( Args... )>
+template <typename Signature>
+class FunctionView;
+
+template <typename Ret, typename... Args>
+class FunctionView<Ret( Args... )>
 {
-	using FunctionPtrType = RetType( * )( Args... );
-	void* mPtr;
-	m
+	using FunctionPtrType = Ret( * )( Args... );
+	using CallableType = Ret( * )( void* toCall, Args&&... args );
 
 public:
 	FunctionView() = default;
+    ~FunctionView() = default;
 
-	template <typename FUNC>
-	FunctionView( FUNC&& object )
+	template <typename FuncObj>
+	FunctionView( FuncObj& functionalObject )
 	{
-		typedef typename std::remove_reference<FUNC>::type UnrefFunctionType;
-		static_assert( sizeof( UnrefFunctionType ) < StorageSize, "functional object doesn't fit into internal storage" );
-		static_assert( std::is_move_constructible<UnrefFunctionType>::value, "Type should be movable" );
+		mPtr = &functionalObject;
+        mCallable = []( void* toCall, Args&&... args )
+        {
+			reinterpret_cast<FuncObj*>( FuncObj )->operator()( std::forward<Args>( args )... );
+        }
+	}
 
+	template <typename FuncRet, typename... FuncArgs>
+	FixedSizeFunction( FuncRet( *func )( FuncArgs... ) )
+	{
+		mPtr = func;
+		mCallable = []( void* toCall, Args&&... args ) -> Ret
+		{
+			return reinterpret_cast<FuncRet( * )( FuncArgs... )>( toCall )( std::forward<Args>( args )... );
+		};
 	}
 
 	FunctionView( const FunctionView& other )
 	{
 		mPtr = other.mPtr;
+		mCallable = other.mCallable;
 	}
 
 	FunctionView& operator=( const FunctionView& other )
 	{
-		mPtr = other.mPtr;
+        mPtr = other.mPtr;
+        mCallable = other.mCallable;
 	}
 
-	~FunctionView()
+	Ret operator()( Args&&... args )
 	{
-	}
-
-	RetType operator()( Args&&... args )
-	{
-		if ( !mCollable )
-			throw std::runtime_error( "call of empty functor" );
-		return mCollable( mStorage, mFunctionPtr, std::forward<Args>( args )... );
+		return mCallable( mStorage, mFunctionPtr, std::forward<Args>( args )... );
 	}
 
 private:
-	union
-	{
-		FunctionPtrType mFunctionPtr;
-		char mStorage[StorageSize];
-	};
-	CollableType mCollable = nullptr;
-	AllocType mAllocFunc = nullptr;
-	DealocType mDealocFunc = nullptr;
+	CallableType mCallable = nullptr;
+    void* mPtr;
+
 };

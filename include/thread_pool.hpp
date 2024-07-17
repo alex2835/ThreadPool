@@ -8,7 +8,7 @@
 #include <condition_variable>
 #include "fixed_size_function.hpp"
 
-template <size_t MaxFuncSize = 64>
+template <size_t MaxFuncSize = 128>
 class ThreadPool
 {
 public:
