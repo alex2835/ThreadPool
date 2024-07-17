@@ -92,7 +92,7 @@ int main( void )
         for ( size_t i = 0; i < 10; i++ )
             tasks.emplace_back( [](){ std::println( "hello future thread:{}", std::this_thread::get_id() ); } );
 
-        // add tasks (function view) to thread pool
+        // add tasks to thread pool
         threadPool.AddTasks( tasks );
 
         // wait for all tasks
