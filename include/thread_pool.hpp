@@ -60,8 +60,8 @@ public:
         mConditionVariable.notify_one();
     }
 
-    template <typename TaskType>
-    void AddTasks( std::vector<TaskType>& tasks )
+    template <typename TasksType>
+    void AddTasks( TasksType& tasks )
     {
         {
             std::unique_lock<std::mutex> lock( mEventMutex );
