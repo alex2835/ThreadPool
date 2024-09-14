@@ -11,11 +11,10 @@ target_include_directories(${TARGET_NAME} PUBLIC
 	${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
-if( TestExe )
-add_executable(thread_pool_test "test/main")
-target_include_directories(thread_pool_test PUBLIC 
-	${CMAKE_CURRENT_SOURCE_DIR}/include
-)
+option(TEST_EXE "tests" OFF)
+if(TEST_EXE)
+	add_executable(thread_pool_test "test/main")
+	target_link_libraries(thread_pool_test PUBLIC ${TARGET_NAME})
 endif()
 
 
