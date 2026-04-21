@@ -1,27 +1,12 @@
-#include <iostream>
 #include <cassert>
 #include <print>
-#include <ranges>
 #include "fixed_size_function.hpp"
 #include "fixed_size_packaged_task.hpp"
 #include "thread_pool.hpp"
 
-
-void* operator new ( size_t size, const char* filename, int line )
-{
-    assert( false );
-    void* ptr = new char[size];
-    return ptr;
-}
-
 int mulFunc( int x, int y )
 {
     return x * y;
-}
-
-void printFunc()
-{
-    std::print( "hello" );
 }
 
 
@@ -87,17 +72,12 @@ int main( void )
     {
         ThreadPool threadPool;
 
-        // create tasks
-        std::vector<FixedSizePackagedTask<void( void )>> tasks;
+        std::vector<std::future<void>> futures;
         for ( size_t i = 0; i < 10; i++ )
-            tasks.emplace_back( [](){ std::println( "hello future thread:{}", std::this_thread::get_id() ); } );
+            futures.push_back( threadPool.AddTask( [](){ std::println( "hello future thread:{}", std::this_thread::get_id() ); } ) );
 
-        // add tasks to thread pool
-        threadPool.AddTasks( tasks );
-
-        // wait for all tasks
-        for ( auto& task : tasks )
-            task.getFuture().get();
+        for ( auto& future : futures )
+            future.get();
 
         std::print( "\nfuture end\n" );
     }

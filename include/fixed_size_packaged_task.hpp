@@ -16,8 +16,8 @@ class FixedSizePackagedTask<Ret( Args... ), StorageSize>
 
 public:
     FixedSizePackagedTask() = delete;
-    FixedSizePackagedTask( FixedSizePackagedTask& ) = delete;
-    FixedSizePackagedTask& operator=( FixedSizePackagedTask& ) = delete;
+    FixedSizePackagedTask( const FixedSizePackagedTask& ) = delete;
+    FixedSizePackagedTask& operator=( const FixedSizePackagedTask& ) = delete;
 
     ~FixedSizePackagedTask() = default;
     FixedSizePackagedTask( FixedSizePackagedTask&& ) = default;
@@ -41,9 +41,9 @@ public:
                 else
                     promise.set_value( func( std::forward<Args>( args )... ) );
             }
-            catch ( std::exception_ptr e )
+            catch ( ... )
             {
-                promise.set_exception( e );
+                promise.set_exception( std::current_exception() );
             }
         };
     }
@@ -61,5 +61,5 @@ public:
 private:
     FixedSizeFunction<Ret( Args... ), StorageSize> mFunction;
     std::promise<Ret> mPromise;
-    CallableType mCallable;
+    CallableType mCallable = nullptr;
 };

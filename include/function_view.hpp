@@ -1,5 +1,6 @@
 #pragma once
 #include <type_traits>
+#include <stdexcept>
 
 template <typename Signature>
 class FunctionView;
@@ -7,7 +8,6 @@ class FunctionView;
 template <typename Ret, typename... Args>
 class FunctionView<Ret( Args... )>
 {
-    using FunctionPtrType = Ret( * )( Args... );
     using CallableType = Ret( * )( void* toCall, Args&&... args );
 
 public:
@@ -17,16 +17,16 @@ public:
     FunctionView( FuncObj& functionalObject )
     {
         mPtr = &functionalObject;
-        mCallable = []( void* toCall, Args&&... args )
+        mCallable = []( void* toCall, Args&&... args ) -> Ret
         {
-            reinterpret_cast<FuncObj*>( FuncObj )->operator()( std::forward<Args>( args )... );
-        }
+            return reinterpret_cast<FuncObj*>( toCall )->operator()( std::forward<Args>( args )... );
+        };
     }
 
     template <typename FuncRet, typename... FuncArgs>
-    FixedSizeFunction( FuncRet( *func )( FuncArgs... ) )
+    FunctionView( FuncRet( *func )( FuncArgs... ) )
     {
-        mPtr = func;
+        mPtr = reinterpret_cast<void*>( func );
         mCallable = []( void* toCall, Args&&... args ) -> Ret
         {
             return reinterpret_cast<FuncRet( * )( FuncArgs... )>( toCall )( std::forward<Args>( args )... );
@@ -43,17 +43,17 @@ public:
     {
         mPtr = other.mPtr;
         mCallable = other.mCallable;
+        return *this;
     }
 
     Ret operator()( Args&&... args )
     {
         if ( not mCallable )
             throw std::runtime_error( "Callable not set" );
-        return mCallable( mStorage, mFunctionPtr, std::forward<Args>( args )... );
+        return mCallable( mPtr, std::forward<Args>( args )... );
     }
 
 private:
     CallableType mCallable = nullptr;
-    void* mPtr;
-
+    void* mPtr = nullptr;
 };

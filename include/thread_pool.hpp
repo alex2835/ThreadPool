@@ -4,19 +4,24 @@
 #include <mutex>
 #include <queue>
 #include <future>
+#include <atomic>
 #include <condition_variable>
 #include "fixed_size_function.hpp"
+#include "fixed_size_packaged_task.hpp"
 
 template <size_t MaxFuncSize = 128>
 class ThreadPool
 {
 public:
-    ThreadPool( size_t threads = std::thread::hardware_concurrency() )
+    explicit ThreadPool( size_t threads = std::thread::hardware_concurrency() )
         : mIsRunning( true )
     {
-        for ( int i = 0; i < threads; i++ )
+        if ( threads == 0 )
+            threads = 1;
+
+        for ( size_t i = 0; i < threads; i++ )
         {
-            mThreadsPool.emplace_back( std::thread( [&]()
+            mThreadsPool.emplace_back( std::thread( [this]()
             {
                 while ( true )
                 {
@@ -24,7 +29,7 @@ public:
                     {
                         std::unique_lock<std::mutex> lock( mEventMutex );
 
-                        mConditionVariable.wait( lock, [&]()
+                        mConditionVariable.wait( lock, [this]()
                         {
                             return !mIsRunning || !mTasks.empty();
                         } );
@@ -49,28 +54,26 @@ public:
         }
         mConditionVariable.notify_all();
         for ( std::thread& thread : mThreadsPool )
-            thread.join();
+        {
+            if ( thread.joinable() )
+                thread.join();
+        }
     }
 
-    template <typename T>
-    void AddTask( T&& task )
+    // Submits a zero-argument callable, returns a future for its result.
+    // The task is fully owned by the pool after this call.
+    template <typename FuncObj>
+    auto AddTask( FuncObj&& func )
     {
+        using Ret = std::invoke_result_t<std::decay_t<FuncObj>>;
+        FixedSizePackagedTask<Ret()> task( std::forward<FuncObj>( func ) );
+        auto future = task.getFuture();
         {
             std::unique_lock<std::mutex> lock( mEventMutex );
-            mTasks.push( std::forward<T>( task ) );
+            mTasks.emplace( std::move( task ) );
         }
         mConditionVariable.notify_one();
-    }
-
-    template <typename TasksType>
-    void AddTasks( TasksType& tasks )
-    {
-        {
-            std::unique_lock<std::mutex> lock( mEventMutex );
-            for ( auto& task : tasks )
-                mTasks.push( [&](){ task(); } );
-        }
-        mConditionVariable.notify_all();
+        return future;
     }
 
 private:
@@ -78,5 +81,5 @@ private:
     std::condition_variable mConditionVariable;
     std::mutex mEventMutex;
     std::vector<std::thread> mThreadsPool;
-    bool mIsRunning;
+    std::atomic<bool> mIsRunning;
 };

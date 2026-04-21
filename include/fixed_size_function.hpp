@@ -1,6 +1,8 @@
 ﻿#pragma once
 #include <array>
 #include <type_traits>
+#include <utility>
+#include <stdexcept>
 
 template <typename Signature, size_t StorageSize = 64>
 class FixedSizeFunction;
@@ -16,8 +18,8 @@ class FixedSizeFunction<Ret( Args... ), StorageSize>
 
 public:
     FixedSizeFunction() = default;
-    FixedSizeFunction( FixedSizeFunction& ) = delete;
-    FixedSizeFunction& operator=( FixedSizeFunction& ) = delete;
+    FixedSizeFunction( const FixedSizeFunction& ) = delete;
+    FixedSizeFunction& operator=( const FixedSizeFunction& ) = delete;
 
     /**
      * @brief FixedSizeFunction Constructor from functional object.
@@ -28,7 +30,7 @@ public:
     FixedSizeFunction( FuncObj&& funcObj )
     {
         typedef typename std::remove_reference<FuncObj>::type UnrefFunctionType;
-        static_assert( sizeof( UnrefFunctionType ) < StorageSize, "functional object doesn't fit into internal storage" );
+        static_assert( sizeof( UnrefFunctionType ) <= StorageSize, "functional object doesn't fit into internal storage" );
         static_assert( std::is_move_constructible<UnrefFunctionType>::value, "Type should be movable" );
 
         mCallable = []( StorageType& funcObjStorage, FunctionPtrType /*func*/, Args&&... args ) -> Ret
@@ -42,7 +44,7 @@ public:
         mAllocationFunction = []( StorageType& storage, void* funcObj )
         {
             UnrefFunctionType* functionalObject = reinterpret_cast<UnrefFunctionType*>( funcObj );
-            ::new( storage.data() )UnrefFunctionType( std::forward<UnrefFunctionType>( *functionalObject ) );
+            ::new( storage.data() )UnrefFunctionType( std::move( *functionalObject ) );
         };
 
         mDeallocationFunction = []( StorageType& storage )
