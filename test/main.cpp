@@ -36,50 +36,38 @@ int main( void )
 
     // Fixed size packaged task
     {
-        std::future<int> future;
-        {
-            FixedSizePackagedTask<int( int, int )> mulTask( []( int a, int b ){ return a * b; } );
-            future = mulTask.getFuture();
-            mulTask( 2, 3 );
-        }
-        assert( future.get() == 6 );
+        FixedSizePackagedTask<int( int, int )> mulTask( []( int a, int b ){ return a * b; } );
+        mulTask( 2, 3 );
+        assert( mulTask.getResult() == 6 );
     }
     {
-        std::future<int> future;
-        {
-            FixedSizePackagedTask<int( int, int )> mulTask( mulFunc );
-            future = mulTask.getFuture();
-            mulTask( 2, 3 );
-        }
-        assert( future.get() == 6 );
+        FixedSizePackagedTask<int( int, int )> mulTask( mulFunc );
+        mulTask( 2, 3 );
+        assert( mulTask.getResult() == 6 );
     }
 
 
-    // Thread pool
+    // Thread pool — caller owns tasks (stable address), waits via the task itself.
     {
         ThreadPool threadPool;
-        for ( size_t i = 0; i < 10; i++ )
-        {
-            threadPool.AddTask( [i](){ std::println( "hello i:{} thread:{}", i, std::this_thread::get_id() ); } );
-        }
-        std::println( "End will be in destructor" );
+
+        FixedSizePackagedTask<int()> t1( [](){ std::println( "task 1 thread:{}", std::this_thread::get_id() ); return 10; } );
+        FixedSizePackagedTask<int()> t2( [](){ std::println( "task 2 thread:{}", std::this_thread::get_id() ); return 20; } );
+        FixedSizePackagedTask<int()> t3( [](){ std::println( "task 3 thread:{}", std::this_thread::get_id() ); return 30; } );
+
+        threadPool.AddTask( t1 );
+        threadPool.AddTask( t2 );
+        threadPool.AddTask( t3 );
+
+        assert( t1.get() == 10 );
+        assert( t2.get() == 20 );
+        assert( t3.get() == 30 );
+
+        std::println( "tasks joined, sum = {}", t1.getResult() + t2.getResult() + t3.getResult() );
     }
 
     std::println( "\nFixedSizeFunction size {}", sizeof( FixedSizeFunction<void( void )> ) );
     std::println( "FixedSizePackagedTask size {}\n", sizeof( FixedSizePackagedTask<void( void )> ) );
-    std::println( "std::packaged_task (Allocate heap memory) size {}\n", sizeof( std::packaged_task<void( void )> ) );
 
-    {
-        ThreadPool threadPool;
-
-        std::vector<std::future<void>> futures;
-        for ( size_t i = 0; i < 10; i++ )
-            futures.push_back( threadPool.AddTask( [](){ std::println( "hello future thread:{}", std::this_thread::get_id() ); } ) );
-
-        for ( auto& future : futures )
-            future.get();
-
-        std::print( "\nfuture end\n" );
-    }
     return 0;
 }

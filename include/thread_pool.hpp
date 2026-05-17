@@ -3,13 +3,11 @@
 #include <thread>
 #include <mutex>
 #include <queue>
-#include <future>
 #include <atomic>
 #include <condition_variable>
-#include "fixed_size_function.hpp"
+#include "function_view.hpp"
 #include "fixed_size_packaged_task.hpp"
 
-template <size_t MaxFuncSize = 128>
 class ThreadPool
 {
 public:
@@ -25,7 +23,7 @@ public:
             {
                 while ( true )
                 {
-                    FixedSizeFunction<void( void ), MaxFuncSize> task;
+                    FunctionView<void()> task;
                     {
                         std::unique_lock<std::mutex> lock( mEventMutex );
 
@@ -37,7 +35,7 @@ public:
                         if ( !mIsRunning && mTasks.empty() )
                             break;
 
-                        task = std::move( mTasks.front() );
+                        task = mTasks.front();
                         mTasks.pop();
                     }
                     task();
@@ -60,24 +58,20 @@ public:
         }
     }
 
-    // Submits a zero-argument callable, returns a future for its result.
-    // The task is fully owned by the pool after this call.
-    template <typename FuncObj>
-    auto AddTask( FuncObj&& func )
+    // Fork: enqueue a non-owning view of a packaged task.
+    // The caller owns the task and must keep it alive until task.wait()/get() returns.
+    template <typename Ret, size_t StorageSize>
+    void AddTask( FixedSizePackagedTask<Ret(), StorageSize>& task )
     {
-        using Ret = std::invoke_result_t<std::decay_t<FuncObj>>;
-        FixedSizePackagedTask<Ret()> task( std::forward<FuncObj>( func ) );
-        auto future = task.getFuture();
         {
             std::unique_lock<std::mutex> lock( mEventMutex );
-            mTasks.emplace( std::move( task ) );
+            mTasks.emplace( task );
         }
         mConditionVariable.notify_one();
-        return future;
     }
 
 private:
-    std::queue<FixedSizeFunction<void( void ), MaxFuncSize>> mTasks;
+    std::queue<FunctionView<void()>> mTasks;
     std::condition_variable mConditionVariable;
     std::mutex mEventMutex;
     std::vector<std::thread> mThreadsPool;

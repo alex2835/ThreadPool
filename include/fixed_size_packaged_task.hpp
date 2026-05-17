@@ -1,7 +1,8 @@
 #pragma once
-#include <array>
-#include <future>
+#include <condition_variable>
+#include <mutex>
 #include <type_traits>
+#include <utility>
 #include "fixed_size_function.hpp"
 
 template <typename Signature, size_t StorageSize = 64>
@@ -10,56 +11,101 @@ class FixedSizePackagedTask;
 template <typename Ret, typename... Args, size_t StorageSize>
 class FixedSizePackagedTask<Ret( Args... ), StorageSize>
 {
-    using CallableType = void( * )( FixedSizeFunction<Ret( Args... ), StorageSize>& func,
-                                    std::promise<Ret>& promise,
-                                    Args&&... args );
-
 public:
     FixedSizePackagedTask() = delete;
     FixedSizePackagedTask( const FixedSizePackagedTask& ) = delete;
     FixedSizePackagedTask& operator=( const FixedSizePackagedTask& ) = delete;
-
+    FixedSizePackagedTask( FixedSizePackagedTask&& ) = delete;
+    FixedSizePackagedTask& operator=( FixedSizePackagedTask&& ) = delete;
     ~FixedSizePackagedTask() = default;
-    FixedSizePackagedTask( FixedSizePackagedTask&& ) = default;
-    FixedSizePackagedTask& operator=( FixedSizePackagedTask&& ) = default;
 
-    template <typename FuncObj>
+    template <typename FuncObj,
+              typename = std::enable_if_t<!std::is_same_v<std::decay_t<FuncObj>, FixedSizePackagedTask>>>
     FixedSizePackagedTask( FuncObj&& func )
         : mFunction( std::forward<FuncObj>( func ) )
+    {}
+
+    void operator()( Args... args )
     {
-        mCallable = []( FixedSizeFunction<Ret( Args... ), StorageSize>& func,
-                        std::promise<Ret>& promise,
-                        Args&&... args ) -> void
+        mResult = mFunction( std::forward<Args>( args )... );
         {
-            try
-            {
-                if constexpr ( std::is_void_v<std::invoke_result_t<FuncObj, Args...>> )
-                {
-                    func( std::forward<Args>( args )... );
-                    promise.set_value();
-                }
-                else
-                    promise.set_value( func( std::forward<Args>( args )... ) );
-            }
-            catch ( ... )
-            {
-                promise.set_exception( std::current_exception() );
-            }
-        };
+            std::lock_guard<std::mutex> lock( mMutex );
+            mDone = true;
+        }
+        mCondVar.notify_all();
     }
 
-    std::future<Ret> getFuture()
+    void wait()
     {
-        return mPromise.get_future();
+        std::unique_lock<std::mutex> lock( mMutex );
+        mCondVar.wait( lock, [this]{ return mDone; } );
     }
 
-    void operator()( Args&&... args )
+    const Ret& get()
     {
-        mCallable( mFunction, mPromise, std::forward<Args>( args )... );
+        wait();
+        return mResult;
+    }
+
+    const Ret& getResult() const noexcept { return mResult; }
+    bool isDone() const noexcept
+    {
+        std::lock_guard<std::mutex> lock( mMutex );
+        return mDone;
     }
 
 private:
     FixedSizeFunction<Ret( Args... ), StorageSize> mFunction;
-    std::promise<Ret> mPromise;
-    CallableType mCallable = nullptr;
+    Ret mResult{};
+    mutable std::mutex mMutex;
+    std::condition_variable mCondVar;
+    bool mDone = false;
+};
+
+template <typename... Args, size_t StorageSize>
+class FixedSizePackagedTask<void( Args... ), StorageSize>
+{
+public:
+    FixedSizePackagedTask() = delete;
+    FixedSizePackagedTask( const FixedSizePackagedTask& ) = delete;
+    FixedSizePackagedTask& operator=( const FixedSizePackagedTask& ) = delete;
+    FixedSizePackagedTask( FixedSizePackagedTask&& ) = delete;
+    FixedSizePackagedTask& operator=( FixedSizePackagedTask&& ) = delete;
+    ~FixedSizePackagedTask() = default;
+
+    template <typename FuncObj,
+              typename = std::enable_if_t<!std::is_same_v<std::decay_t<FuncObj>, FixedSizePackagedTask>>>
+    FixedSizePackagedTask( FuncObj&& func )
+        : mFunction( std::forward<FuncObj>( func ) )
+    {}
+
+    void operator()( Args... args )
+    {
+        mFunction( std::forward<Args>( args )... );
+        {
+            std::lock_guard<std::mutex> lock( mMutex );
+            mDone = true;
+        }
+        mCondVar.notify_all();
+    }
+
+    void wait()
+    {
+        std::unique_lock<std::mutex> lock( mMutex );
+        mCondVar.wait( lock, [this]{ return mDone; } );
+    }
+
+    void get() { wait(); }
+
+    bool isDone() const noexcept
+    {
+        std::lock_guard<std::mutex> lock( mMutex );
+        return mDone;
+    }
+
+private:
+    FixedSizeFunction<void( Args... ), StorageSize> mFunction;
+    mutable std::mutex mMutex;
+    std::condition_variable mCondVar;
+    bool mDone = false;
 };
